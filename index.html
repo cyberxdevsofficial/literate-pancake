@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ByteGhost OS | Enterprise Cloud Studio</title>
+    
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <style>
+        :root {
+            --bg: #0d1117;
+            --sidebar: #010409;
+            --activity: #050505;
+            --border: #30363d;
+            --accent: #58a6ff;
+            --tab-active: #161b22;
+            --text: #c9d1d9;
+            --status-bg: #007acc;
+            --danger: #f85149;
+        }
+
+        * { box-sizing: border-box; outline: none; transition: background 0.2s; }
+        body, html { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; overflow: hidden; }
+
+        /* --- OS BOOT LOADER --- */
+        #loader { position: fixed; inset: 0; background: #000; z-index: 10000; display: flex; align-items: center; justify-content: center; flex-direction: column; }
+        .logo-box { text-align: center; }
+        .logo-text { font-size: 3rem; font-weight: 800; letter-spacing: 10px; color: #fff; margin-bottom: 10px; }
+        .logo-text span { color: var(--accent); }
+        .load-status { font-family: 'Fira Code'; font-size: 10px; color: var(--accent); text-transform: uppercase; margin-top: 15px; }
+        .p-track { width: 250px; height: 2px; background: #111; margin-top: 10px; border-radius: 10px; overflow: hidden; }
+        #p-bar { height: 100%; width: 0%; background: var(--accent); box-shadow: 0 0 15px var(--accent); }
+
+        /* --- MAIN OS LAYOUT --- */
+        #os-container { display: none; height: 100vh; width: 100vw; flex-direction: column; }
+
+        .os-body { display: flex; flex: 1; overflow: hidden; }
+
+        /* Activity Bar */
+        .activity-bar { width: 50px; background: var(--activity); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; padding: 15px 0; gap: 20px; }
+        .act-icon { font-size: 22px; cursor: pointer; opacity: 0.4; padding: 10px; width: 100%; text-align: center; }
+        .act-icon:hover, .act-icon.active { opacity: 1; color: var(--accent); border-left: 2px solid var(--accent); }
+
+        /* Sidebar Explorer */
+        .sidebar-panel { width: 260px; background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+        .panel-header { padding: 12px 15px; font-size: 11px; font-weight: 800; color: #8b949e; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
+        .actions button { background: none; border: none; color: #fff; cursor: pointer; font-size: 16px; margin-left: 5px; opacity: 0.6; }
+        .actions button:hover { opacity: 1; color: var(--accent); }
+
+        .file-tree { flex: 1; overflow-y: auto; padding: 10px 0; }
+        .tree-item { padding: 6px 15px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; position: relative; }
+        .tree-item:hover { background: #161b22; }
+        .tree-item.active { background: #21262d; color: var(--accent); }
+        .tree-folder { color: #d2a8ff; font-weight: 600; }
+        .indent { margin-left: 15px; border-left: 1px solid #21262d; }
+
+        /* Editor Section */
+        .editor-zone { flex: 1; display: flex; flex-direction: column; background: var(--bg); overflow: hidden; }
+        .tab-strip { height: 35px; background: #010409; display: flex; overflow-x: auto; border-bottom: 1px solid var(--border); }
+        .tab { min-width: 120px; padding: 0 15px; font-size: 12px; display: flex; align-items: center; justify-content: space-between; background: var(--sidebar); border-right: 1px solid var(--border); cursor: pointer; color: #8b949e; }
+        .tab.active { background: var(--bg); color: #fff; border-top: 1px solid var(--accent); }
+        .tab .close-tab { margin-left: 10px; font-size: 14px; }
+        .tab .close-tab:hover { color: var(--danger); }
+
+        #monaco-editor { flex: 1; width: 100%; }
+
+        /* Terminal Area */
+        .terminal-tray { height: 180px; background: #000; border-top: 1px solid var(--border); display: flex; flex-direction: column; }
+        .term-nav { padding: 5px 15px; background: #0d1117; font-size: 11px; font-weight: bold; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
+        #output-stream { flex: 1; padding: 10px; font-family: 'Fira Code', monospace; font-size: 12px; overflow-y: auto; color: #d1d1d1; }
+
+        /* Status Bar */
+        .status-bar { height: 22px; background: var(--status-bg); color: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; font-size: 11px; }
+
+        /* Context Menu */
+        #context-menu { position: fixed; background: #1c2128; border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.5); z-index: 1000; display: none; padding: 5px 0; border-radius: 4px; }
+        .menu-item { padding: 8px 25px; font-size: 12px; cursor: pointer; }
+        .menu-item:hover { background: var(--accent); color: #000; }
+        .menu-item.del { color: var(--danger); }
+    </style>
+</head>
+<body>
+
+    <div id="loader">
+        <div class="logo-box">
+            <div class="logo-text">BYTE<span>GHOST</span></div>
+            <div class="p-track"><div id="p-bar"></div></div>
+            <div class="load-status" id="load-msg">Initializing OS Kernel...</div>
+        </div>
+    </div>
+
+    <div id="os-container">
+        <div class="os-body">
+            <nav class="activity-bar">
+                <div class="act-icon active" title="Explorer">📄</div>
+                <div class="act-icon" title="Search">🔍</div>
+                <div class="act-icon" title="Git Control">🌿</div>
+                <div class="act-icon" title="Extensions">📦</div>
+                <div style="flex:1"></div>
+                <div class="act-icon" id="download-zip" title="Export Project">💾</div>
+                <div class="act-icon" id="theme-toggle" title="Toggle Theme">🌓</div>
+            </nav>
+
+            <aside class="sidebar-panel">
+                <div class="panel-header">
+                    <span>EXPLORER</span>
+                    <div class="actions">
+                        <button id="add-f" title="New File">📄</button>
+                        <button id="add-d" title="New Folder">📁</button>
+                    </div>
+                </div>
+                <div class="file-tree" id="tree-root"></div>
+            </aside>
+
+            <main class="editor-zone">
+                <div class="tab-strip" id="tabs"></div>
+                <div id="monaco-editor"></div>
+                
+                <div class="terminal-tray">
+                    <div class="term-nav">
+                        <span>TERMINAL (javascript)</span>
+                        <div style="display:flex; gap:10px;">
+                            <button onclick="runCode()" style="background:var(--accent); border:none; color:#000; font-weight:bold; cursor:pointer; border-radius:2px;">RUN</button>
+                            <button onclick="document.getElementById('output-stream').innerHTML=''" style="background:transparent; border:1px solid #444; color:#aaa; cursor:pointer;">CLEAR</button>
+                        </div>
+                    </div>
+                    <div id="output-stream"></div>
+                </div>
+            </main>
+        </div>
+
+        <footer class="status-bar">
+            <div id="status-left">Ready</div>
+            <div id="status-right">UTF-8 | JavaScript | Ln 1, Col 1</div>
+        </footer>
+    </div>
+
+    <div id="context-menu">
+        <div class="menu-item del" id="menu-delete">Delete</div>
+        <div class="menu-item" id="menu-rename">Rename</div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs/loader.min.js"></script>
+    
+    <script>
+        // --- OS STATE ---
+        let vfs = {
+            "main.js": { content: "console.log('ByteGhost OS v1.0');\n\nconst ghost = () => {\n  console.log('System Operational');\n};\n\nghost();", type: "file" },
+            "styles.css": { content: "body { background: #0d1117; }", type: "file" },
+            "src": { type: "folder", children: {
+                "api.js": { content: "// Internal API logic", type: "file" }
+            }}
+        };
+
+        let currentFile = "main.js";
+        let editor;
+        let menuTarget = null;
+
+        // --- BOOT SEQUENCE ---
+        (function boot() {
+            const bar = document.getElementById('p-bar');
+            const msg = document.getElementById('load-msg');
+            const messages = ["Mounting Drive...", "Loading Monaco Engine...", "Configuring UI...", "Done."];
+            let p = 0;
+            
+            const int = setInterval(() => {
+                p += Math.random() * 5;
+                if(p >= 100) {
+                    p = 100;
+                    clearInterval(int);
+                    document.getElementById('loader').style.display = 'none';
+                    document.getElementById('os-container').style.display = 'flex';
+                    initMonaco();
+                }
+                bar.style.width = p + '%';
+                msg.innerText = messages[Math.floor((p/100)*messages.length)];
+            }, 40);
+        })();
+
+        // --- EDITOR ENGINE ---
+        function initMonaco() {
+            require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs' }});
+            require(['vs/editor/editor.main'], function() {
+                editor = monaco.editor.create(document.getElementById('monaco-editor'), {
+                    value: vfs["main.js"].content,
+                    language: 'javascript',
+                    theme: 'vs-dark',
+                    fontFamily: 'Fira Code',
+                    fontSize: 14,
+                    automaticLayout: true,
+                    cursorSmoothCaretAnimation: true,
+                    smoothScrolling: true
+                });
+
+                // Status Bar update
+                editor.onDidChangeCursorPosition(e => {
+                    document.getElementById('status-right').innerText = `UTF-8 | Ln ${e.position.lineNumber}, Col ${e.position.column}`;
+                });
+
+                // Real-time save
+                editor.onDidChangeModelContent(() => {
+                    saveFile(currentFile, editor.getValue());
+                });
+
+                renderTree();
+                renderTabs();
+            });
+        }
+
+        // --- FILE SYSTEM CORE ---
+        function saveFile(path, content) {
+            const parts = path.split('/');
+            let ref = vfs;
+            for(let i=0; i<parts.length-1; i++) ref = ref[parts[i]].children;
+            ref[parts[parts.length-1]].content = content;
+        }
+
+        function renderTree() {
+            const root = document.getElementById('tree-root');
+            root.innerHTML = "";
+            function build(obj, parent = "") {
+                let html = "";
+                Object.keys(obj).sort().forEach(key => {
+                    const path = parent ? `${parent}/${key}` : key;
+                    const isDir = obj[key].type === "folder";
+                    const active = path === currentFile ? "active" : "";
+                    html += `<div class="tree-item ${active} ${isDir ? 'tree-folder' : ''}" 
+                             oncontextmenu="showMenu(event, '${path}')" 
+                             onclick="openFile('${path}', ${isDir})">
+                                ${isDir ? '📁' : '📄'} ${key}
+                             </div>`;
+                    if(isDir) html += `<div class="indent">${build(obj[key].children, path)}</div>`;
+                });
+                return html;
+            }
+            root.innerHTML = build(vfs);
+        }
+
+        function openFile(path, isDir) {
+            if(isDir) return;
+            currentFile = path;
+            const parts = path.split('/');
+            let ref = vfs;
+            for(let i=0; i<parts.length-1; i++) ref = ref[parts[i]].children;
+            
+            editor.setValue(ref[parts[parts.length-1]].content);
+            const ext = path.split('.').pop();
+            const lang = ext === 'js' ? 'javascript' : ext === 'css' ? 'css' : 'html';
+            monaco.editor.setModelLanguage(editor.getModel(), lang);
+            
+            renderTree();
+            renderTabs();
+        }
+
+        function renderTabs() {
+            const container = document.getElementById('tabs');
+            container.innerHTML = `<div class="tab active">${currentFile.split('/').pop()} <span class="close-tab">×</span></div>`;
+        }
+
+        // --- OS FEATURES ---
+        function runCode() {
+            const out = document.getElementById('output-stream');
+            out.innerHTML += `<div><span style="color:var(--accent)">[ByteGhost]</span> Executing ${currentFile}...</div>`;
+            try {
+                const code = editor.getValue();
+                const fakeConsole = { log: (m) => out.innerHTML += `<div>${m}</div>`, error: (m) => out.innerHTML += `<div style="color:var(--danger)">${m}</div>` };
+                new Function('console', code)(fakeConsole);
+            } catch(e) { out.innerHTML += `<div style="color:var(--danger)">Runtime Error: ${e.message}</div>`; }
+            out.scrollTop = out.scrollHeight;
+        }
+
+        document.getElementById('add-f').onclick = () => {
+            const name = prompt("New File Name:");
+            if(name) { vfs[name] = { content: "", type: "file" }; renderTree(); }
+        };
+
+        document.getElementById('add-d').onclick = () => {
+            const name = prompt("New Folder Name:");
+            if(name) { vfs[name] = { type: "folder", children: {} }; renderTree(); }
+        };
+
+        // Download Project as ZIP
+        document.getElementById('download-zip').onclick = async () => {
+            const zip = new JSZip();
+            function pack(obj, folder) {
+                Object.keys(obj).forEach(k => {
+                    if(obj[k].type === 'file') folder.file(k, obj[k].content);
+                    else pack(obj[k].children, folder.folder(k));
+                });
+            }
+            pack(vfs, zip);
+            const blob = await zip.generateAsync({type:"blob"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = "ByteGhost_Project.zip"; a.click();
+        };
+
+        // Theme Toggle
+        document.getElementById('theme-toggle').onclick = () => {
+            const current = editor._themeService._theme.themeName;
+            const newTheme = current === 'vs-dark' ? 'vs' : 'vs-dark';
+            monaco.editor.setTheme(newTheme);
+            document.documentElement.style.setProperty('--bg', newTheme === 'vs' ? '#fff' : '#0d1117');
+            document.documentElement.style.setProperty('--text', newTheme === 'vs' ? '#000' : '#c9d1d9');
+        };
+
+        // --- CONTEXT MENU LOGIC ---
+        function showMenu(e, path) {
+            e.preventDefault();
+            menuTarget = path;
+            const menu = document.getElementById('context-menu');
+            menu.style.top = e.pageY + 'px';
+            menu.style.left = e.pageX + 'px';
+            menu.style.display = 'block';
+        }
+
+        window.onclick = () => document.getElementById('context-menu').style.display = 'none';
+
+        document.getElementById('menu-delete').onclick = () => {
+            if(confirm(`Delete ${menuTarget}?`)) {
+                // Simplified delete for root level
+                delete vfs[menuTarget];
+                renderTree();
+            }
+        };
+    </script>
+</body>
+</html>
